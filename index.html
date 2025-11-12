@@ -1,809 +1,128 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>CHECK SIXONE - ระบบเช็คชื่อนักเรียน</title>
-
-  <!-- Fonts + Tailwind -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#14532d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>SIXONE CHECK</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <style>
-    body{box-sizing:border-box;font-family:'Inter','Noto Sans Thai',sans-serif}
-    *{box-sizing:border-box}
-    .toast{position:fixed;top:20px;right:20px;padding:16px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:1000;animation:slideIn .3s ease-out;max-width:90%}
-    @keyframes slideIn{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}
-    .btn-status{transition:all .2s ease;position:relative}
-    .btn-status:hover{transform:translateY(-2px);box-shadow:0 4px 8px rgba(0,0,0,.15)}
-    .btn-status:active{transform:translateY(0)}
-    .btn-status.active::after{content:'✓';position:absolute;top:-4px;right:-4px;background:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;box-shadow:0 2px 4px rgba(0,0,0,.2)}
-    .student-row{transition:background-color .2s ease}
-    .student-row:hover{background:#f9fafb}
-    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:999;padding:20px}
-    .modal-content{background:#fff;border-radius:12px;max-width:500px;width:100%;max-height:90%;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
-    @media (max-width:640px){.toast{left:20px;right:20px;max-width:none}}
-    @view-transition { navigation: auto; }
+    body { font-family: 'LINE Seed Sans TH', sans-serif; background: #f5f5f5; }
+    .btn-tappable { min-height: 44px; min-width: 44px; }
+    .safe-pad { padding-top: max(1rem, env(safe-area-inset-top)); padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+    .surface { background: white; border-radius: 0.75rem; }
   </style>
-
-  <!-- Fallback SDKs: ทำให้แอปทำงานได้โดยไม่ใช้ /_sdk/* (เก็บใน localStorage) -->
-<script>
-const SUPABASE_URL = "https://jxqzfslzevkgveahciwy.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4cXpmc2x6ZXZrZ3ZlYWhjaXd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NjIyNzcsImV4cCI6MjA3ODUzODI3N30._YTzK6DczLqbpRrMv1TS22L0Wk8BrDFa-59QEUlThcQ";
-
-if (!window.elementSdk) {
-  window.elementSdk = {
-    config: null, _onChange: null,
-    init({ defaultConfig, onConfigChange }) {
-      this.config = { ...defaultConfig };
-      this._onChange = onConfigChange;
-      onConfigChange(this.config);
-    },
-    setConfig(patch) {
-      this.config = { ...(this.config || {}), ...patch };
-      this._onChange && this._onChange(this.config);
-    }
-  };
-}
-
-(function () {
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-  async function fetchAll() {
-    const [att, stu] = await Promise.all([
-      supabase.from('attendance').select('*').order('timestamp', { ascending: true }),
-      supabase.from('students').select('*').order('student_number', { ascending: true })
-    ]);
-    if (att.error) throw att.error;
-    if (stu.error) throw stu.error;
-    const attendanceRecords = (att.data || []).map(r => ({ ...r, __backendId: r.id }));
-    const studentRecords    = (stu.data || []).map(r => ({ ...r, __backendId: r.student_id }));
-    return [...attendanceRecords, ...studentRecords];
-  }
-
-  function subscribeRealtime(handler) {
-    return supabase.channel('realtime:all')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, () => refresh(handler))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => refresh(handler))
-      .subscribe();
-  }
-
-  async function refresh(handler) {
-    try {
-      const all = await fetchAll();
-      handler?.onDataChanged?.(all);
-    } catch (e) { console.error(e); }
-  }
-
-  window.dataSdk = {
-    async init(handler) {
-      try {
-        const all = await fetchAll();
-        handler?.onDataChanged?.(all);
-        this._handler = handler;
-        this._channel = subscribeRealtime(handler);
-        return { isOk: true };
-      } catch (e) {
-        console.error(e);
-        return { isOk: false, error: e.message };
-      }
-    },
-
-    async create(obj) {
-      try {
-        if (obj.date) {
-          const payload = {
-            date: obj.date, student_id: obj.student_id,
-            status: obj.status, remark: obj.remark || '',
-            timestamp: obj.timestamp || Date.now()
-          };
-          const { error } = await supabase.from('attendance').insert(payload);
-          if (error) throw error;
-        } else if (obj.student_number) {
-          const payload = {
-            student_id: obj.student_id || obj.student_number,
-            student_number: obj.student_number,
-            student_name: obj.student_name,
-            student_class: obj.student_class,
-            timestamp: obj.timestamp || Date.now()
-          };
-          const { error } = await supabase.from('students').insert(payload);
-          if (error) throw error;
-        }
-        this._handler && refresh(this._handler);
-        return { isOk: true };
-      } catch (e) {
-        console.error(e);
-        return { isOk: false, error: e.message };
-      }
-    },
-
-    async update(obj) {
-      try {
-        if (obj.date) {
-          const id = obj.__backendId || obj.id;
-          const { error } = await supabase.from('attendance')
-            .update({ status: obj.status, remark: obj.remark || '', timestamp: Date.now() })
-            .eq('id', id);
-          if (error) throw error;
-        } else if (obj.student_number) {
-          const id = obj.__backendId || obj.student_id || obj.student_number;
-          const { error } = await supabase.from('students')
-            .update({
-              student_number: obj.student_number,
-              student_name: obj.student_name,
-              student_class: obj.student_class,
-              timestamp: Date.now()
-            })
-            .eq('student_id', id);
-          if (error) throw error;
-        }
-        this._handler && refresh(this._handler);
-        return { isOk: true };
-      } catch (e) {
-        console.error(e);
-        return { isOk: false, error: e.message };
-      }
-    },
-
-    async delete(obj) {
-      try {
-        if (obj.date) {
-          const id = obj.__backendId || obj.id;
-          await supabase.from('attendance').delete().eq('id', id);
-        } else if (obj.student_number) {
-          const id = obj.__backendId || obj.student_id || obj.student_number;
-          await supabase.from('students').delete().eq('student_id', id);
-        }
-        this._handler && refresh(this._handler);
-        return { isOk: true };
-      } catch (e) {
-        console.error(e);
-        return { isOk: false, error: e.message };
-      }
-    }
-  };
-})();
-</script>
 </head>
 
-<body class="bg-gray-50">
-  <div id="app"></div>
+<body class="safe-pad">
+  <div class="max-w-4xl mx-auto px-4 py-6">
+    <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+      <h1 class="text-2xl sm:text-3xl font-bold text-green-700 mb-3 sm:mb-0">SIXONE CHECK</h1>
+      <button id="addStudentBtn" class="btn-tappable bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+        + เพิ่มนักเรียน
+      </button>
+    </header>
+
+    <main>
+      <div id="studentList" class="space-y-3"></div>
+    </main>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+    <div class="surface p-6 w-[90%] max-w-md">
+      <h2 class="text-lg font-semibold mb-4">เพิ่มนักเรียน</h2>
+      <input id="studentNumber" placeholder="เลขที่" class="w-full border rounded px-3 py-2 mb-2" />
+      <input id="studentName" placeholder="ชื่อ-สกุล" class="w-full border rounded px-3 py-2 mb-2" />
+      <input id="studentClass" placeholder="ห้อง" class="w-full border rounded px-3 py-2 mb-4" />
+      <div class="flex justify-end gap-2">
+        <button onclick="closeModal()" class="px-4 py-2 bg-gray-200 rounded">ยกเลิก</button>
+        <button onclick="addStudent()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">บันทึก</button>
+      </div>
+    </div>
+  </div>
 
   <script>
-  /* ======================= CONFIG & STATE ======================= */
-  const defaultConfig = {
-    background_color:'#f9fafb',
-    surface_color:'#ffffff',
-    text_color:'#1f2937',
-    primary_color:'#14532d',
-    secondary_color:'#16a34a',
-    font_family:'Inter',
-    font_size:16,
-    app_title:'CHECK SIXONE',
-    tagline:'เช็คชื่อไว ข้อมูลครบ ในที่เดียว',
-    cta_button:'เริ่มเช็คชื่อวันนี้',
-    menu_check:'เช็คชื่อวันนี้',
-    menu_students:'รายชื่อนักเรียน',
-    menu_report:'รายงาน',
-    menu_settings:'ตั้งค่า',
-    menu_about:'เกี่ยวกับ'
-  };
+  const SUPABASE_URL = "https://jxqzfslzevkgveahciwy.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4cXpmc2x6ZXZrZ3ZlYWhjaXd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NjIyNzcsImV4cCI6MjA3ODUzODI3N30._YTzK6DczLqbpRrMv1TS22L0Wk8BrDFa-59QEUlThcQ";
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  // นักเรียนอ้างอิง (เว้นว่าง แล้วให้ผู้ใช้เพิ่มเอง)
-  const referenceStudents = [];
+  const listEl = document.getElementById('studentList');
+  const modal = document.getElementById('modal');
+  const studentNumberEl = document.getElementById('studentNumber');
+  const studentNameEl = document.getElementById('studentName');
+  const studentClassEl = document.getElementById('studentClass');
 
-  let currentPage = 'home';
-  let attendanceRecords = [];
-  let studentRecords = [];
-  let searchQuery = '';
-  let filterClass = 'all';
-  let isLoading = false;
-  let editingStudent = null;
-  let showEditModal = false;
-  let showAddModal = false;
-  let deletingStudentId = null;
-
-  const dataHandler = {
-    onDataChanged(data) {
-      attendanceRecords = data.filter(r => r.date);
-      studentRecords   = data.filter(r => r.student_number);
-      render();
-    }
-  };
-
-  async function initApp() {
-    const ok = await window.dataSdk.init(dataHandler);
-    if (!ok.isOk) { showToast('ไม่สามารถเชื่อมต่อระบบได้','error'); return; }
-    render();
+  // ดึงข้อมูลนักเรียนทั้งหมด
+  async function loadStudents() {
+    const { data, error } = await supabase.from('students').select('*').order('student_number');
+    if (error) { console.error(error); return; }
+    renderStudents(data);
   }
 
-  /* ======================= HELPERS ======================= */
-  function getStudentList() {
-    const customStudents = studentRecords.map(s => ({
-      id:s.student_id, name:s.student_name, class:s.student_class,
-      isCustom:true, recordId:s.__backendId
-    }));
-    const referenceStudentIds = referenceStudents.map(s => s.id);
-    const merged = referenceStudents.map(ref => {
-      const cs = customStudents.find(x => x.id === ref.id);
-      return cs || { ...ref, isCustom:false };
-    });
-    customStudents.forEach(cs => {
-      if (!referenceStudentIds.includes(cs.id)) merged.push(cs);
-    });
-    return merged.sort((a,b)=>(parseInt(a.id)||0)-(parseInt(b.id)||0));
-  }
-
-  const getTodayString = () => {
-    const d=new Date(); const y=d.getFullYear();
-    const m=String(d.getMonth()+1).padStart(2,'0');
-    const dd=String(d.getDate()).padStart(2,'0');
-    return `${y}-${m}-${dd}`;
-  };
-
-  function getStudentStatus(studentId, date){
-    const r = attendanceRecords.find(r => r.student_id===studentId && r.date===date);
-    return r ? r.status : null;
-  }
-
-  async function setAttendance(studentId, status){
-    if (attendanceRecords.length >= 999) { showToast('ถึงขีดจำกัด 999 รายการ','error'); return; }
-    isLoading = true; render();
-
-    const today = getTodayString();
-    const existing = attendanceRecords.find(r => r.student_id===studentId && r.date===today);
-
-    if (existing){
-      existing.status = status; existing.timestamp = Date.now();
-      await window.dataSdk.update(existing);
-      showToast('บันทึกสำเร็จ','success');
-    }else{
-      const rec = { date:today, student_id:studentId, status, remark:'', timestamp:Date.now() };
-      await window.dataSdk.create(rec);
-      showToast('บันทึกสำเร็จ','success');
-    }
-    isLoading=false; render();
-  }
-
-  async function markAllPresent(){
-    const students = getStudentList();
-    if (attendanceRecords.length + students.length > 999) {
-      showToast('ถึงขีดจำกัดการบันทึก','error'); return;
-    }
-    isLoading=true; render();
-    const today=getTodayString();
-
-    for (const s of students){
-      const ex = attendanceRecords.find(r => r.student_id===s.id && r.date===today);
-      if (ex){ ex.status='มา'; ex.timestamp=Date.now(); await window.dataSdk.update(ex); }
-      else { await window.dataSdk.create({date:today,student_id:s.id,status:'มา',remark:'',timestamp:Date.now()}); }
-    }
-    isLoading=false; showToast('ติ๊กมาทั้งห้องสำเร็จ','success'); render();
-  }
-
-  function getTodaySummary(){
-    const today = getTodayString();
-    const recs = attendanceRecords.filter(r=>r.date===today);
-    const total = getStudentList().length;
-    return {
-      present: recs.filter(r=>r.status==='มา').length,
-      absent:  recs.filter(r=>r.status==='ขาด').length,
-      leave:   recs.filter(r=>r.status==='ลา').length,
-      total
-    };
-  }
-
-  function showToast(msg,type='success'){
-    const old=document.querySelector('.toast'); if (old) old.remove();
-    const el=document.createElement('div');
-    el.className=`toast ${type==='success'?'bg-green-600':'bg-red-600'} text-white`;
-    el.textContent=msg; document.body.appendChild(el);
-    setTimeout(()=>el.remove(),3000);
-  }
-
-  function generateSummaryText(){
-    const today=getTodayString();
-    const recs=attendanceRecords.filter(r=>r.date===today);
-    const students=getStudentList(); const s=getTodaySummary();
-
-    const thaiDate=new Date(today).toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
-    let text=`📊 สรุปผลการเช็คชื่อ\nวันที่: ${thaiDate}\nห้อง: 6/1\n\n`;
-    text+=`สถิติการเข้าเรียน:\n✅ มาเรียน: ${s.present} คน\n❌ ขาดเรียน: ${s.absent} คน\n📝 ลา: ${s.leave} คน\n👥 รวมทั้งหมด: ${s.total} คน\n\n`;
-    if (s.absent>0){ text+=`รายชื่อนักเรียนที่ขาดเรียน:\n`; students.forEach(st=>{const r=recs.find(x=>x.student_id===st.id); if(r&&r.status==='ขาด') text+=`  - เลขที่ ${st.id} ${st.name}\n`;}); text+=`\n`; }
-    if (s.leave>0){ text+=`รายชื่อนักเรียนที่ลา:\n`; students.forEach(st=>{const r=recs.find(x=>x.student_id===st.id); if(r&&r.status==='ลา') text+=`  - เลขที่ ${st.id} ${st.name}\n`;}); text+=`\n`; }
-    text+=`---\nสร้างโดย CHECK SIXONE`;
-    return text;
-  }
-
-  function copySummary(){
-    const t=generateSummaryText();
-    (navigator.clipboard?.writeText?.(t) ?? Promise.reject()).then(
-      ()=>showToast('คัดลอกข้อความสรุปผลสำเร็จ','success'),
-      ()=>{ // fallback
-        const ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.left='-9999px';
-        document.body.appendChild(ta); ta.select();
-        try{ document.execCommand('copy'); showToast('คัดลอกข้อความสรุปผลสำเร็จ','success'); }catch{ showToast('คัดลอกไม่สำเร็จ','error'); }
-        document.body.removeChild(ta);
-      }
-    );
-  }
-
-  function exportCSV(){
-    const today=getTodayString();
-    const recs=attendanceRecords.filter(r=>r.date===today);
-    if (!recs.length){ showToast('ยังไม่มีข้อมูลการเช็คชื่อวันนี้','error'); return; }
-    const students=getStudentList();
-    let csv='วันที่,เลขที่,ชื่อ-สกุล,ห้อง,สถานะ,หมายเหตุ\n';
-    students.forEach(s=>{
-      const r=recs.find(x=>x.student_id===s.id);
-      csv+=`${today},${s.id},${s.name},${s.class},${r? r.status : 'ยังไม่เช็ค'},${r? r.remark:''}\n`;
-    });
-    const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
-    const link=document.createElement('a'); link.href=URL.createObjectURL(blob);
-    link.download=`เช็คชื่อ_${today}.csv`; document.body.appendChild(link); link.click();
-    document.body.removeChild(link); URL.revokeObjectURL(link.href);
-    showToast(`ส่งออกข้อมูล ${recs.length} รายการสำเร็จ`,'success');
-  }
-
-  function getFilteredStudents(){
-    return getStudentList().filter(s=>{
-      const matchesSearch = (s.name||'').toLowerCase().includes((searchQuery||'').toLowerCase()) || (s.id||'').includes(searchQuery||'');
-      const matchesClass = filterClass==='all' || s.class===filterClass;
-      return matchesSearch && matchesClass;
-    });
-  }
-
-  function openEditModal(id){ const st=getStudentList().find(s=>s.id===id); if(st){ editingStudent={...st}; showEditModal=true; render(); } }
-  function closeEditModal(){ editingStudent=null; showEditModal=false; render(); }
-  function openAddModal(){ showAddModal=true; render(); }
-  function closeAddModal(){ showAddModal=false; render(); }
-  function confirmDeleteStudent(id, recordId){ deletingStudentId={id,recordId}; render(); }
-  function cancelDelete(){ deletingStudentId=null; render(); }
-
-  async function deleteStudent(){
-    if (!deletingStudentId) return;
-    isLoading=true; render();
-    const record = studentRecords.find(r=>r.student_id===deletingStudentId.id);
-    if (record?.__backendId){ await window.dataSdk.delete(record); showToast('ลบนักเรียนสำเร็จ','success'); }
-    else { showToast('ไม่สามารถลบนักเรียนอ้างอิงได้','error'); }
-    deletingStudentId=null; isLoading=false; render();
-  }
-
-  async function saveStudent(e){
-    e.preventDefault();
-    if (studentRecords.length>=999 && !editingStudent.isCustom){ showToast('ถึงขีดจำกัด 999 รายการ','error'); return; }
-    isLoading=true; render();
-    const f=new FormData(e.target);
-    const newNumber=f.get('student_number'); const newName=f.get('student_name'); const newClass=f.get('student_class');
-
-    const dup=getStudentList().find(s=>s.id===newNumber && s.id!==editingStudent.id);
-    if (dup){ showToast('เลขที่นี้มีอยู่แล้ว','error'); isLoading=false; render(); return; }
-
-    if (editingStudent.isCustom && editingStudent.recordId){
-      const ex=studentRecords.find(r=>r.__backendId===editingStudent.recordId);
-      if (ex){ ex.student_id=newNumber; ex.student_number=newNumber; ex.student_name=newName; ex.student_class=newClass; ex.timestamp=Date.now(); await window.dataSdk.update(ex); showToast('แก้ไขข้อมูลสำเร็จ','success'); }
-    } else {
-      await window.dataSdk.create({ student_id:newNumber, student_number:newNumber, student_name:newName, student_class:newClass, timestamp:Date.now() });
-      showToast('บันทึกข้อมูลสำเร็จ','success');
-    }
-    closeEditModal(); isLoading=false; render();
-  }
-
-  async function addNewStudent(e){
-    e.preventDefault();
-    if (studentRecords.length>=999){ showToast('ถึงขีดจำกัด 999 รายการ','error'); return; }
-    isLoading=true; render();
-    const f=new FormData(e.target);
-    const newNumber=f.get('student_number'); const newName=f.get('student_name'); const newClass=f.get('student_class');
-    if (getStudentList().find(s=>s.id===newNumber)){ showToast('เลขที่นี้มีอยู่แล้ว','error'); isLoading=false; render(); return; }
-    await window.dataSdk.create({ student_id:newNumber, student_number:newNumber, student_name:newName, student_class:newClass, timestamp:Date.now() });
-    showToast('เพิ่มนักเรียนสำเร็จ','success'); closeAddModal(); isLoading=false; render();
-  }
-
-  /* ======================= RENDERERS ======================= */
-  function render(){ 
-    const config = window.elementSdk?.config || defaultConfig;
-    const app = document.getElementById('app');
-
-    if (currentPage==='home')      app.innerHTML = renderHomePage(config);
-    else if (currentPage==='check')app.innerHTML = renderCheckPage(config);
-    else if (currentPage==='students') app.innerHTML = renderStudentsPage(config);
-    else if (currentPage==='report')   app.innerHTML = renderReportPage(config);
-    else if (currentPage==='settings') app.innerHTML = renderSettingsPage(config);
-    else if (currentPage==='about')    app.innerHTML = renderAboutPage(config);
-
-    if (showEditModal) app.innerHTML += renderEditModal(config);
-    if (showAddModal)  app.innerHTML += renderAddModal(config);
-    if (deletingStudentId) app.innerHTML += renderDeleteConfirmation(config);
-
-    attachEventListeners(); onConfigChange(config);
-  }
-
-  function renderEditModal(config){
-    if (!editingStudent) return '';
-    return `
-    <div class="modal-overlay" onclick="handleEditModalClick(event)">
-      <div class="modal-content" onclick="event.stopPropagation()">
-        <div class="p-6">
-          <div class="flex justify-between items-center mb-6">
-            <h3 class="text-xl font-bold text-content" style="color:${config.text_color}">แก้ไขข้อมูลนักเรียน</h3>
-            <button onclick="closeEditModal()" class="text-2xl hover:opacity-70" style="color:${config.text_color}">&times;</button>
-          </div>
-          <form onsubmit="saveStudent(event)" class="space-y-4">
-            <div>
-              <label class="block text-sm font-medium mb-2" style="color:${config.text_color}">เลขที่</label>
-              <input type="text" name="student_number" value="${editingStudent.id}" required class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color:${config.primary_color};color:${config.text_color}"/>
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-2" style="color:${config.text_color}">ชื่อ-สกุล</label>
-              <input type="text" name="student_name" value="${editingStudent.name}" required class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color:${config.primary_color};color:${config.text_color}"/>
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-2" style="color:${config.text_color}">ห้อง</label>
-              <input type="text" name="student_class" value="${editingStudent.class}" required class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color:${config.primary_color};color:${config.text_color}"/>
-            </div>
-            <div class="flex gap-3 pt-4">
-              <button type="submit" class="flex-1 px-6 py-3 rounded-lg text-white font-medium" style="background:${config.primary_color}" ${isLoading?'disabled':''}>${isLoading?'กำลังบันทึก...':'บันทึก'}</button>
-              <button type="button" onclick="closeEditModal()" class="flex-1 px-6 py-3 rounded-lg font-medium border" style="border-color:${config.primary_color};color:${config.primary_color}" ${isLoading?'disabled':''}>ยกเลิก</button>
-            </div>
-          </form>
+  // แสดงข้อมูลนักเรียน
+  function renderStudents(students) {
+    listEl.innerHTML = students.map(st => `
+      <div class="surface p-4 flex justify-between items-center">
+        <div>
+          <div class="font-semibold text-lg">${st.student_name}</div>
+          <div class="text-sm text-gray-500">เลขที่ ${st.student_number} | ห้อง ${st.student_class}</div>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn-tappable bg-blue-500 text-white px-3 py-2 rounded" onclick="markAttendance('${st.student_id}', 'มา')">มา</button>
+          <button class="btn-tappable bg-yellow-500 text-white px-3 py-2 rounded" onclick="markAttendance('${st.student_id}', 'ลา')">ลา</button>
+          <button class="btn-tappable bg-red-600 text-white px-3 py-2 rounded" onclick="markAttendance('${st.student_id}', 'ขาด')">ขาด</button>
         </div>
       </div>
-    </div>`;
+    `).join('');
   }
 
-  function renderAddModal(config){
-    return `
-    <div class="modal-overlay" onclick="handleAddModalClick(event)">
-      <div class="modal-content" onclick="event.stopPropagation()">
-        <div class="p-6">
-          <div class="flex justify-between items-center mb-6">
-            <h3 class="text-xl font-bold" style="color:${config.text_color}">เพิ่มนักเรียนใหม่</h3>
-            <button onclick="closeAddModal()" class="text-2xl hover:opacity-70" style="color:${config.text_color}">&times;</button>
-          </div>
-          <form onsubmit="addNewStudent(event)" class="space-y-4">
-            <div>
-              <label class="block text-sm font-medium mb-2" style="color:${config.text_color}">เลขที่</label>
-              <input type="text" name="student_number" required placeholder="เช่น 11" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color:${config.primary_color};color:${config.text_color}"/>
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-2" style="color:${config.text_color}">ชื่อ-สกุล</label>
-              <input type="text" name="student_name" required placeholder="เช่น ด.ช. สมชาย ใจดี" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color:${config.primary_color};color:${config.text_color}"/>
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-2" style="color:${config.text_color}">ห้อง</label>
-              <input type="text" name="student_class" required placeholder="เช่น 6/1" class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color:${config.primary_color};color:${config.text_color}"/>
-            </div>
-            <div class="flex gap-3 pt-4">
-              <button type="submit" class="flex-1 px-6 py-3 rounded-lg text-white font-medium" style="background:${config.primary_color}" ${isLoading?'disabled':''}>${isLoading?'กำลังเพิ่ม...':'เพิ่มนักเรียน'}</button>
-              <button type="button" onclick="closeAddModal()" class="flex-1 px-6 py-3 rounded-lg font-medium border" style="border-color:${config.primary_color};color:${config.primary_color}" ${isLoading?'disabled':''}>ยกเลิก</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>`;
+  // เพิ่มนักเรียน
+  async function addStudent() {
+    const num = studentNumberEl.value.trim();
+    const name = studentNameEl.value.trim();
+    const cls = studentClassEl.value.trim();
+    if (!num || !name || !cls) return alert("กรุณากรอกข้อมูลให้ครบ");
+
+    const { error } = await supabase.from('students').insert({
+      student_id: crypto.randomUUID(),
+      student_number: num,
+      student_name: name,
+      student_class: cls,
+      timestamp: Date.now()
+    });
+    if (error) { alert("บันทึกไม่สำเร็จ"); console.error(error); }
+    closeModal();
   }
 
-  function renderDeleteConfirmation(config){
-    const students=getStudentList();
-    const st=students.find(s=>s.id===deletingStudentId.id);
-    return `
-    <div class="modal-overlay" onclick="event.stopPropagation()">
-      <div class="modal-content" style="max-width:400px" onclick="event.stopPropagation()">
-        <div class="p-6 text-center">
-          <div class="text-5xl mb-4">⚠️</div>
-          <h3 class="text-xl font-bold mb-2" style="color:${config.text_color}">ยืนยันการลบ</h3>
-          <p class="text-sm" style="color:${config.text_color};opacity:.7">คุณต้องการลบนักเรียน<br/><strong>${st?st.name:''}</strong><br/>ใช่หรือไม่?</p>
-          <div class="flex gap-3 mt-6">
-            <button onclick="deleteStudent()" class="flex-1 px-6 py-3 rounded-lg text-white font-medium bg-red-600 hover:bg-red-700" ${isLoading?'disabled':''}>${isLoading?'กำลังลบ...':'ลบ'}</button>
-            <button onclick="cancelDelete()" class="flex-1 px-6 py-3 rounded-lg font-medium border" style="border-color:${config.primary_color};color:${config.primary_color}" ${isLoading?'disabled':''}>ยกเลิก</button>
-          </div>
-        </div>
-      </div>
-    </div>`;
+  // เช็กชื่อ
+  async function markAttendance(student_id, status) {
+    const today = new Date().toISOString().split('T')[0];
+    const { error } = await supabase.from('attendance').upsert({
+      student_id,
+      date: today,
+      status,
+      timestamp: Date.now()
+    });
+    if (error) { console.error(error); alert("เกิดข้อผิดพลาด"); }
   }
 
-  function renderHomePage(config){
-    const s=getTodaySummary();
-    return `
-    <div class="min-h-full" style="background:${config.background_color}">
-      ${renderHeader(config)}
-      <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <div class="text-center mb-12">
-          <h1 id="app-title" class="text-4xl font-bold mb-4" style="color:${config.primary_color}">${config.app_title}</h1>
-          <p id="tagline" class="text-xl" style="color:${config.text_color}">${config.tagline}</p>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div class="p-6 rounded-lg shadow-md surface" style="background:${config.surface_color}">
-            <div class="flex items-center justify-between">
-              <div><p class="text-sm" style="color:${config.text_color};opacity:.7">มาเรียน</p><p class="text-3xl font-bold" style="color:${config.secondary_color}">${s.present}</p></div>
-              <div class="text-4xl">✓</div>
-            </div>
-          </div>
-          <div class="p-6 rounded-lg shadow-md surface" style="background:${config.surface_color}">
-            <div class="flex items-center justify-between">
-              <div><p class="text-sm" style="color:${config.text_color};opacity:.7">ขาดเรียน</p><p class="text-3xl font-bold text-red-600">${s.absent}</p></div>
-              <div class="text-4xl">✗</div>
-            </div>
-          </div>
-          <div class="p-6 rounded-lg shadow-md surface" style="background:${config.surface_color}">
-            <div class="flex items-center justify-between">
-              <div><p class="text-sm" style="color:${config.text_color};opacity:.7">ลา</p><p class="text-3xl font-bold text-yellow-600">${s.leave}</p></div>
-              <div class="text-4xl">📝</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="text-center">
-          <button id="cta-button" class="px-8 py-4 rounded-lg text-white font-semibold shadow-lg hover:shadow-xl transition-all" style="background:${config.primary_color}" onclick="navigateTo('check')">${config.cta_button}</button>
-        </div>
-      </main>
-    </div>`;
+  // Modal
+  document.getElementById('addStudentBtn').onclick = () => modal.classList.remove('hidden');
+  function closeModal() {
+    modal.classList.add('hidden');
+    studentNumberEl.value = '';
+    studentNameEl.value = '';
+    studentClassEl.value = '';
   }
 
-  function renderCheckPage(config){
-    const today=getTodayString(); const s=getTodaySummary(); const list=getFilteredStudents();
-    return `
-    <div class="min-h-full" style="background:${config.background_color}">
-      ${renderHeader(config)}
-      <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <div class="mb-6">
-          <h2 class="text-2xl font-bold mb-2" style="color:${config.text_color}">เช็คชื่อวันนี้</h2>
-          <p style="color:${config.text_color};opacity:.7">${today}</p>
-        </div>
-
-        <div class="p-4 rounded-lg shadow-md mb-6 surface" style="background:${config.surface_color}">
-          <div class="flex flex-wrap gap-4 items-center justify-between">
-            <div class="flex gap-4 text-sm">
-              <span>มา: <strong style="color:${config.secondary_color}">${s.present}</strong></span>
-              <span>ขาด: <strong class="text-red-600">${s.absent}</strong></span>
-              <span>ลา: <strong class="text-yellow-600">${s.leave}</strong></span>
-            </div>
-            <button class="px-4 py-2 rounded-lg text-white font-medium text-sm" style="background:${config.secondary_color}" onclick="markAllPresent()" ${isLoading?'disabled':''}>${isLoading?'กำลังบันทึก...':'มาทั้งห้อง'}</button>
-          </div>
-        </div>
-
-        <div class="p-4 rounded-lg shadow-md mb-6 surface" style="background:${config.surface_color}">
-          <div class="flex flex-col sm:flex-row gap-4">
-            <input type="text" placeholder="ค้นหาชื่อหรือเลขที่..." class="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color:${config.primary_color};color:${config.text_color}" value="${searchQuery}" oninput="handleSearch(event)"/>
-            <select class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color:${config.primary_color};color:${config.text_color}" onchange="handleFilterChange(event)">
-              <option value="all">ทุกห้อง</option>
-              <option value="6/1" ${filterClass==='6/1'?'selected':''}>6/1</option>
-              <option value="6/2" ${filterClass==='6/2'?'selected':''}>6/2</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="rounded-lg shadow-md overflow-hidden surface" style="background:${config.surface_color}">
-          ${list.map(st=>{
-            const status=getStudentStatus(st.id,today);
-            return `
-              <div class="student-row p-4 border-b last:border-b-0" style="border-color:rgba(0,0,0,.1)">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div class="flex-1">
-                    <div class="flex items-center gap-3">
-                      <span class="font-bold text-lg" style="color:${config.primary_color}">${st.id}</span>
-                      <h3 class="font-semibold" style="color:${config.text_color}">${st.name || '-'}</h3>
-                    </div>
-                    <p class="text-sm" style="color:${config.text_color};opacity:.6">${st.class || '-'}</p>
-                  </div>
-                  <div class="flex gap-2">
-                    <button class="btn-status ${status==='มา'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white" style="background:${status==='มา'?config.secondary_color:'#9ca3af'}" onclick="setAttendance('${st.id}','มา')" ${isLoading?'disabled':''}>มา</button>
-                    <button class="btn-status ${status==='ขาด'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white" style="background:${status==='ขาด'?'#dc2626':'#9ca3af'}" onclick="setAttendance('${st.id}','ขาด')" ${isLoading?'disabled':''}>ขาด</button>
-                    <button class="btn-status ${status==='ลา'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white" style="background:${status==='ลา'?'#ca8a04':'#9ca3af'}" onclick="setAttendance('${st.id}','ลา')" ${isLoading?'disabled':''}>ลา</button>
-                  </div>
-                </div>
-              </div>`;
-          }).join('')}
-        </div>
-      </main>
-    </div>`;
-  }
-
-  function renderStudentsPage(config){
-    const students=getStudentList();
-    return `
-    <div class="min-h-full" style="background:${config.background_color}">
-      ${renderHeader(config)}
-      <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <div class="flex justify-between items-center mb-6">
-          <h2 class="text-2xl font-bold" style="color:${config.text_color}">รายชื่อนักเรียน</h2>
-          <button onclick="openAddModal()" class="px-6 py-2 rounded-lg text-white font-medium" style="background:${config.primary_color}">+ เพิ่มนักเรียน</button>
-        </div>
-
-        <div class="rounded-lg shadow-md overflow-hidden surface" style="background:${config.surface_color}">
-          <table class="w-full">
-            <thead style="background:${config.primary_color}">
-              <tr>
-                <th class="px-6 py-3 text-left text-sm font-semibold text-white">เลขที่</th>
-                <th class="px-6 py-3 text-left text-sm font-semibold text-white">ชื่อ-สกุล</th>
-                <th class="px-6 py-3 text-left text-sm font-semibold text-white">ห้อง</th>
-                <th class="px-6 py-3 text-center text-sm font-semibold text-white">จัดการ</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${students.map(st=>`
-                <tr class="border-b hover:bg-gray-50" style="border-color:rgba(0,0,0,.1)">
-                  <td class="px-6 py-4 text-sm font-medium" style="color:${config.text_color}">${st.id}</td>
-                  <td class="px-6 py-4 text-sm" style="color:${config.text_color}">${st.name}</td>
-                  <td class="px-6 py-4 text-sm" style="color:${config.text_color}">${st.class}</td>
-                  <td class="px-6 py-4 text-center">
-                    <div class="flex gap-2 justify-center">
-                      <button onclick="openEditModal('${st.id}')" class="px-4 py-2 rounded text-white text-sm font-medium hover:opacity-90" style="background:${config.secondary_color}">แก้ไข</button>
-                      <button onclick="confirmDeleteStudent('${st.id}','${st.recordId||''}')" class="px-4 py-2 rounded text-white text-sm font-medium hover:opacity-90 bg-red-600">ลบ</button>
-                    </div>
-                  </td>
-                </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-
-        <div class="mt-6 text-center text-sm" style="color:${config.text_color}">
-          จำนวนนักเรียนทั้งหมด: <strong>${students.length}</strong> คน
-        </div>
-      </main>
-    </div>`;
-  }
-
-  function renderReportPage(config){
-    const s=getTodaySummary();
-    return `
-    <div class="min-h-full" style="background:${config.background_color}">
-      ${renderHeader(config)}
-      <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <h2 class="text-2xl font-bold mb-6" style="color:${config.text_color}">รายงานและสถิติ</h2>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div class="p-6 rounded-lg shadow-md surface" style="background:${config.surface_color}">
-            <h3 class="text-lg font-semibold mb-4" style="color:${config.text_color}">สรุปวันนี้</h3>
-            <div class="space-y-2">
-              <div class="flex justify-between"><span>มาเรียน</span><span class="font-bold" style="color:${config.secondary_color}">${s.present}</span></div>
-              <div class="flex justify-between"><span>ขาดเรียน</span><span class="font-bold text-red-600">${s.absent}</span></div>
-              <div class="flex justify-between"><span>ลา</span><span class="font-bold text-yellow-600">${s.leave}</span></div>
-              <div class="flex justify-between pt-2 border-t" style="border-color:rgba(0,0,0,.1)"><span class="font-semibold">รวม</span><span class="font-bold">${s.total}</span></div>
-            </div>
-          </div>
-
-          <div class="p-6 rounded-lg shadow-md md:col-span-2 surface" style="background:${config.surface_color}">
-            <h3 class="text-lg font-semibold mb-4" style="color:${config.text_color}">กราฟสรุปรายสัปดาห์</h3>
-            <div class="flex items-end justify-around h-48 gap-2">
-              ${[1,2,3,4,5].map(day=>{
-                const h=Math.random()*80+20;
-                return `<div class="flex-1 flex flex-col items-center gap-2"><div class="w-full rounded-t" style="background:${config.secondary_color};height:${h}%"></div><span class="text-xs">วัน ${day}</span></div>`;
-              }).join('')}
-            </div>
-          </div>
-        </div>
-
-        <div class="p-6 rounded-lg shadow-md mb-6 surface" style="background:${config.surface_color}">
-          <h3 class="text-lg font-semibold mb-4" style="color:${config.text_color}">สรุปผลการเช็คชื่อ</h3>
-          <div class="p-4 rounded mb-4" style="background:${config.background_color}">
-            <pre class="text-sm whitespace-pre-wrap" style="color:${config.text_color}">${generateSummaryText()}</pre>
-          </div>
-          <button class="px-6 py-3 rounded-lg text-white font-medium" style="background:${config.secondary_color}" onclick="copySummary()">📋 คัดลอกข้อความสรุปผล</button>
-        </div>
-
-        <div class="p-6 rounded-lg shadow-md surface" style="background:${config.surface_color}">
-          <h3 class="text-lg font-semibold mb-4" style="color:${config.text_color}">ส่งออกข้อมูล</h3>
-          <p class="text-sm mb-4" style="color:${config.text_color};opacity:.7">ดาวน์โหลดข้อมูลการเช็คชื่อวันนี้เป็นไฟล์ CSV</p>
-          <button class="px-6 py-3 rounded-lg text-white font-medium" style="background:${config.primary_color}" onclick="exportCSV()">ส่งออก CSV</button>
-        </div>
-      </main>
-    </div>`;
-  }
-
-  function renderSettingsPage(config){
-    const students=getStudentList();
-    return `
-    <div class="min-h-full" style="background:${config.background_color}">
-      ${renderHeader(config)}
-      <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <h2 class="text-2xl font-bold mb-6" style="color:${config.text_color}">ตั้งค่า</h2>
-
-        <div class="p-6 rounded-lg shadow-md mb-6 surface" style="background:${config.surface_color}">
-          <h3 class="text-lg font-semibold mb-4">การจัดเก็บข้อมูล</h3>
-          <div class="flex items-center gap-2 p-3 rounded" style="background:${config.background_color}">
-            <span class="text-2xl">💾</span>
-            <span class="text-sm font-medium" style="color:${config.secondary_color}">ข้อมูลถูกเก็บไว้ในเครื่อง (localStorage)</span>
-          </div>
-        </div>
-
-        <div class="p-6 rounded-lg shadow-md surface" style="background:${config.surface_color}">
-          <h3 class="text-lg font-semibold mb-4">ข้อมูลระบบ</h3>
-          <div class="space-y-3 text-sm">
-            <div class="flex justify-between"><span style="opacity:.7">จำนวนบันทึกทั้งหมด</span><span>${attendanceRecords.length + studentRecords.length} / 999</span></div>
-            <div class="flex justify-between"><span style="opacity:.7">จำนวนนักเรียน</span><span>${students.length} คน</span></div>
-            <div class="flex justify-between"><span style="opacity:.7">เวอร์ชัน</span><span>1.1.0</span></div>
-          </div>
-        </div>
-      </main>
-    </div>`;
-  }
-
-  function renderAboutPage(config){
-    return `
-    <div class="min-h-full" style="background:${config.background_color}">
-      ${renderHeader(config)}
-      <main class="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <h2 class="text-2xl font-bold mb-6" style="color:${config.text_color}">เกี่ยวกับระบบ</h2>
-        <div class="p-6 rounded-lg shadow-md mb-6 surface" style="background:${config.surface_color}">
-          <h3 class="text-lg font-semibold mb-4">CHECK SIXONE</h3>
-          <p class="mb-2">ระบบเช็คชื่อนักเรียนรายวันสำหรับครูประจำชั้น สะดวก รวดเร็ว ใช้งานบนมือถือได้</p>
-          <div class="space-y-1 text-sm">
-            <p>✓ เช็คชื่อรายวันด้วยปุ่มติ๊กง่ายๆ</p>
-            <p>✓ แก้ไขรายชื่อและเลขที่นักเรียนได้</p>
-            <p>✓ สรุปสถิติและรายงานแบบเรียลไทม์</p>
-            <p>✓ ส่งออกข้อมูลเป็น CSV</p>
-            <p>✓ ข้อมูลเก็บใน localStorage</p>
-          </div>
-        </div>
-      </main>
-    </div>`;
-  }
-
-  function renderHeader(config){
-    return `
-    <header class="shadow-sm surface" style="background:${config.surface_color}">
-      <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between items-center h-16">
-          <div class="font-bold text-xl" style="color:${config.primary_color}">CS6/1</div>
-          <div class="flex gap-1 sm:gap-4 text-sm">
-            <button id="menu-check" class="px-2 sm:px-4 py-2 rounded hover:bg-gray-100 ${currentPage==='check'?'font-semibold':''}" style="color:${currentPage==='check'?config.primary_color:config.text_color}" onclick="navigateTo('check')">${config.menu_check}</button>
-            <button id="menu-students" class="px-2 sm:px-4 py-2 rounded hover:bg-gray-100 ${currentPage==='students'?'font-semibold':''}" style="color:${currentPage==='students'?config.primary_color:config.text_color}" onclick="navigateTo('students')">${config.menu_students}</button>
-            <button id="menu-report" class="px-2 sm:px-4 py-2 rounded hover:bg-gray-100 ${currentPage==='report'?'font-semibold':''}" style="color:${currentPage==='report'?config.primary_color:config.text_color}" onclick="navigateTo('report')">${config.menu_report}</button>
-            <button id="menu-settings" class="px-2 sm:px-4 py-2 rounded hover:bg-gray-100 ${currentPage==='settings'?'font-semibold':''}" style="color:${currentPage==='settings'?config.primary_color:config.text_color}" onclick="navigateTo('settings')">${config.menu_settings}</button>
-            <button id="menu-about" class="px-2 sm:px-4 py-2 rounded hover:bg-gray-100 ${currentPage==='about'?'font-semibold':''}" style="color:${currentPage==='about'?config.primary_color:config.text_color}" onclick="navigateTo('about')">${config.menu_about}</button>
-          </div>
-        </div>
-      </nav>
-    </header>`;
-  }
-
-  function attachEventListeners(){
-    window.navigateTo = (p)=>{ currentPage=p; render(); };
-    window.setAttendance=setAttendance;
-    window.markAllPresent=markAllPresent;
-    window.exportCSV=exportCSV;
-    window.copySummary=copySummary;
-    window.openEditModal=openEditModal;
-    window.closeEditModal=closeEditModal;
-    window.saveStudent=saveStudent;
-    window.openAddModal=openAddModal;
-    window.closeAddModal=closeAddModal;
-    window.addNewStudent=addNewStudent;
-    window.confirmDeleteStudent=confirmDeleteStudent;
-    window.cancelDelete=cancelDelete;
-    window.deleteStudent=deleteStudent;
-
-    window.handleSearch=(e)=>{ searchQuery=e.target.value; render(); };
-    window.handleFilterChange=(e)=>{ filterClass=e.target.value; render(); };
-    window.handleEditModalClick=(e)=>{ if(e.target.classList.contains('modal-overlay')) closeEditModal(); };
-    window.handleAddModalClick=(e)=>{ if(e.target.classList.contains('modal-overlay')) closeAddModal(); };
-  }
-
-  function onConfigChange(config){
-    const customFont=config.font_family || defaultConfig.font_family;
-    const baseSize=config.font_size || defaultConfig.font_size;
-    document.body.style.fontFamily=`${customFont}, Inter, Noto Sans Thai, sans-serif`;
-    document.body.style.backgroundColor=config.background_color;
-    document.body.style.color=config.text_color;
-
-    const appTitle=document.getElementById('app-title');
-    if (appTitle){ appTitle.style.fontSize=`${baseSize*1.5}px`; appTitle.style.color=config.primary_color; }
-    const tagline=document.getElementById('tagline');
-    if (tagline){ tagline.style.fontSize=`${baseSize}px`; tagline.style.color=config.text_color; }
-  }
-
-  // เริ่มทำงาน
-  window.elementSdk.init({
-    defaultConfig,
-    onConfigChange,
-    mapToCapabilities: ()=>({}) // ไม่ใช้ในเวอร์ชันนี้
-  });
-  initApp();
+  // โหลดข้อมูลครั้งแรก + realtime
+  loadStudents();
+  supabase.channel('realtime-students')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, loadStudents)
+    .subscribe();
   </script>
 </body>
 </html>
