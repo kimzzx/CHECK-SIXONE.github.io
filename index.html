@@ -8,6 +8,7 @@
   <!-- Fonts + Tailwind -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
     body{box-sizing:border-box;font-family:'Inter','Noto Sans Thai',sans-serif}
@@ -27,61 +28,144 @@
   </style>
 
   <!-- Fallback SDKs: ทำให้แอปทำงานได้โดยไม่ใช้ /_sdk/* (เก็บใน localStorage) -->
-  <script>
-  (function () {
-    // elementSdk จำลอง: ใช้แค่ config/theme
-    if (!window.elementSdk) {
-      window.elementSdk = {
-        config: null,
-        _onChange: null,
-        init({ defaultConfig, onConfigChange }) {
-          this.config = { ...defaultConfig };
-          this._onChange = onConfigChange;
-          onConfigChange(this.config);
-        },
-        setConfig(patch) {
-          this.config = { ...(this.config || {}), ...patch };
-          this._onChange && this._onChange(this.config);
-        }
-      };
-    }
+<script>
+const SUPABASE_URL = "https://jxqzfslzevkgveahciwy.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4cXpmc2x6ZXZrZ3ZlYWhjaXd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NjIyNzcsImV4cCI6MjA3ODUzODI3N30._YTzK6DczLqbpRrMv1TS22L0Wk8BrDFa-59QEUlThcQ";
 
-    // dataSdk จำลอง: เก็บข้อมูลใน localStorage
-    if (!window.dataSdk) {
-      const KEY = 'check_sixone_data_v1';
-      const read = () => JSON.parse(localStorage.getItem(KEY) || '[]');
-      const write = (arr) => localStorage.setItem(KEY, JSON.stringify(arr));
-      const notify = (arr, self) => self._handler?.onDataChanged?.(arr);
-
-      window.dataSdk = {
-        async init(handler) {
-          this._handler = handler;
-          notify(read(), this);
-          return { isOk: true };
-        },
-        async create(obj) {
-          const data = read();
-          obj.__backendId = (crypto.randomUUID?.() || String(Date.now()+Math.random()));
-          data.push(obj);
-          write(data); notify(data, this);
-          return { isOk: true };
-        },
-        async update(obj) {
-          const data = read();
-          const i = data.findIndex(x => x.__backendId === obj.__backendId);
-          if (i !== -1) data[i] = obj;
-          write(data); notify(data, this);
-          return { isOk: true };
-        },
-        async delete(obj) {
-          const data = read().filter(x => x.__backendId !== obj.__backendId);
-          write(data); notify(data, this);
-          return { isOk: true };
-        }
-      };
+if (!window.elementSdk) {
+  window.elementSdk = {
+    config: null, _onChange: null,
+    init({ defaultConfig, onConfigChange }) {
+      this.config = { ...defaultConfig };
+      this._onChange = onConfigChange;
+      onConfigChange(this.config);
+    },
+    setConfig(patch) {
+      this.config = { ...(this.config || {}), ...patch };
+      this._onChange && this._onChange(this.config);
     }
-  })();
-  </script>
+  };
+}
+
+(function () {
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  async function fetchAll() {
+    const [att, stu] = await Promise.all([
+      supabase.from('attendance').select('*').order('timestamp', { ascending: true }),
+      supabase.from('students').select('*').order('student_number', { ascending: true })
+    ]);
+    if (att.error) throw att.error;
+    if (stu.error) throw stu.error;
+    const attendanceRecords = (att.data || []).map(r => ({ ...r, __backendId: r.id }));
+    const studentRecords    = (stu.data || []).map(r => ({ ...r, __backendId: r.student_id }));
+    return [...attendanceRecords, ...studentRecords];
+  }
+
+  function subscribeRealtime(handler) {
+    return supabase.channel('realtime:all')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, () => refresh(handler))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => refresh(handler))
+      .subscribe();
+  }
+
+  async function refresh(handler) {
+    try {
+      const all = await fetchAll();
+      handler?.onDataChanged?.(all);
+    } catch (e) { console.error(e); }
+  }
+
+  window.dataSdk = {
+    async init(handler) {
+      try {
+        const all = await fetchAll();
+        handler?.onDataChanged?.(all);
+        this._handler = handler;
+        this._channel = subscribeRealtime(handler);
+        return { isOk: true };
+      } catch (e) {
+        console.error(e);
+        return { isOk: false, error: e.message };
+      }
+    },
+
+    async create(obj) {
+      try {
+        if (obj.date) {
+          const payload = {
+            date: obj.date, student_id: obj.student_id,
+            status: obj.status, remark: obj.remark || '',
+            timestamp: obj.timestamp || Date.now()
+          };
+          const { error } = await supabase.from('attendance').insert(payload);
+          if (error) throw error;
+        } else if (obj.student_number) {
+          const payload = {
+            student_id: obj.student_id || obj.student_number,
+            student_number: obj.student_number,
+            student_name: obj.student_name,
+            student_class: obj.student_class,
+            timestamp: obj.timestamp || Date.now()
+          };
+          const { error } = await supabase.from('students').insert(payload);
+          if (error) throw error;
+        }
+        this._handler && refresh(this._handler);
+        return { isOk: true };
+      } catch (e) {
+        console.error(e);
+        return { isOk: false, error: e.message };
+      }
+    },
+
+    async update(obj) {
+      try {
+        if (obj.date) {
+          const id = obj.__backendId || obj.id;
+          const { error } = await supabase.from('attendance')
+            .update({ status: obj.status, remark: obj.remark || '', timestamp: Date.now() })
+            .eq('id', id);
+          if (error) throw error;
+        } else if (obj.student_number) {
+          const id = obj.__backendId || obj.student_id || obj.student_number;
+          const { error } = await supabase.from('students')
+            .update({
+              student_number: obj.student_number,
+              student_name: obj.student_name,
+              student_class: obj.student_class,
+              timestamp: Date.now()
+            })
+            .eq('student_id', id);
+          if (error) throw error;
+        }
+        this._handler && refresh(this._handler);
+        return { isOk: true };
+      } catch (e) {
+        console.error(e);
+        return { isOk: false, error: e.message };
+      }
+    },
+
+    async delete(obj) {
+      try {
+        if (obj.date) {
+          const id = obj.__backendId || obj.id;
+          await supabase.from('attendance').delete().eq('id', id);
+        } else if (obj.student_number) {
+          const id = obj.__backendId || obj.student_id || obj.student_number;
+          await supabase.from('students').delete().eq('student_id', id);
+        }
+        this._handler && refresh(this._handler);
+        return { isOk: true };
+      } catch (e) {
+        console.error(e);
+        return { isOk: false, error: e.message };
+      }
+    }
+  };
+})();
+</script>
 </head>
 
 <body class="bg-gray-50">
