@@ -585,7 +585,7 @@ function getTodaySummary(){
           <p id="tagline" class="text-xl" style="color:${config.text_color}">${config.tagline}</p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div class="p-6 rounded-lg shadow-md surface" style="background:${config.surface_color}">
             <div class="flex items-center justify-between">
               <div><p class="text-sm" style="color:${config.text_color};opacity:.7">มาเรียน</p><p class="text-3xl font-bold" style="color:${config.secondary_color}">${s.present}</p></div>
@@ -664,10 +664,6 @@ function getTodaySummary(){
                     <button class="btn-status ${status==='มา'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white" style="background:${status==='มา'?config.secondary_color:'#9ca3af'}" onclick="setAttendance('${st.id}','มา')" ${isLoading?'disabled':''}>มา</button>
                     <button class="btn-status ${status==='ขาด'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white" style="background:${status==='ขาด'?'#dc2626':'#9ca3af'}" onclick="setAttendance('${st.id}','ขาด')" ${isLoading?'disabled':''}>ขาด</button>
                     <button class="btn-status ${status==='ลา'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white" style="background:${status==='ลา'?'#ca8a04':'#9ca3af'}" onclick="setAttendance('${st.id}','ลา')" ${isLoading?'disabled':''}>ลา</button>
-                    <button 
-                      class="btn-status ${status==='สาย'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white"
-                      style="background:${status==='สาย'?'#f97316':'#9ca3af'}"   <!-- orange-500 -->
-                      onclick="setAttendance('${st.id}','สาย')" ${isLoading?'disabled':''}>สาย</button>
                   </div>
                 </div>
               </div>`;
@@ -730,7 +726,7 @@ function getTodaySummary(){
       <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <h2 class="text-2xl font-bold mb-6" style="color:${config.text_color}">รายงานและสถิติ</h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div class="p-6 rounded-lg shadow-md surface" style="background:${config.surface_color}">
             <h3 class="text-lg font-semibold mb-4" style="color:${config.text_color}">สรุปวันนี้</h3>
             <div class="space-y-2">
@@ -738,7 +734,6 @@ function getTodaySummary(){
               <div class="flex justify-between"><span>ขาดเรียน</span><span class="font-bold text-red-600">${s.absent}</span></div>
               <div class="flex justify-between"><span>ลา</span><span class="font-bold text-yellow-600">${s.leave}</span></div>
               <div class="flex justify-between pt-2 border-t" style="border-color:rgba(0,0,0,.1)"><span class="font-semibold">รวม</span><span class="font-bold">${s.total}</span></div>
-              <div class="flex justify-between"><span>สาย</span><span class="font-bold text-orange-500">${s.late}</span></div>
             </div>
           </div>
 
