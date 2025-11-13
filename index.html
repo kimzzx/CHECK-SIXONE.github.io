@@ -320,17 +320,18 @@ if (!window.elementSdk) {
     isLoading=false; showToast('ติ๊กมาทั้งห้องสำเร็จ','success'); render();
   }
 
-  function getTodaySummary(){
-    const today = getTodayString();
-    const recs = attendanceRecords.filter(r=>r.date===today);
-    const total = getStudentList().length;
-    return {
-      present: recs.filter(r=>r.status==='มา').length,
-      absent:  recs.filter(r=>r.status==='ขาด').length,
-      leave:   recs.filter(r=>r.status==='ลา').length,
-      total
-    };
-  }
+function getTodaySummary(){
+  const today = getTodayString();
+  const recs = attendanceRecords.filter(r=>r.date===today);
+  const total = getStudentList().length;
+  return {
+    present: recs.filter(r=>r.status==='มา').length,
+    absent:  recs.filter(r=>r.status==='ขาด').length,
+    leave:   recs.filter(r=>r.status==='ลา').length,
+    late:    recs.filter(r=>r.status==='สาย').length,
+    total
+  };
+}
 
   function showToast(msg,type='success'){
     const old=document.querySelector('.toast'); if (old) old.remove();
@@ -341,18 +342,49 @@ if (!window.elementSdk) {
   }
 
   function generateSummaryText(){
-    const today=getTodayString();
-    const recs=attendanceRecords.filter(r=>r.date===today);
-    const students=getStudentList(); const s=getTodaySummary();
+  const today=getTodayString();
+  const recs=attendanceRecords.filter(r=>r.date===today);
+  const students=getStudentList(); const s=getTodaySummary();
 
-    const thaiDate=new Date(today).toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
-    let text=`📊 สรุปผลการเช็คชื่อ\nวันที่: ${thaiDate}\nห้อง: 6/1\n\n`;
-    text+=`สถิติการเข้าเรียน:\n✅ มาเรียน: ${s.present} คน\n❌ ขาดเรียน: ${s.absent} คน\n📝 ลา: ${s.leave} คน\n👥 รวมทั้งหมด: ${s.total} คน\n\n`;
-    if (s.absent>0){ text+=`รายชื่อนักเรียนที่ขาดเรียน:\n`; students.forEach(st=>{const r=recs.find(x=>x.student_id===st.id); if(r&&r.status==='ขาด') text+=`  - เลขที่ ${st.id} ${st.name}\n`;}); text+=`\n`; }
-    if (s.leave>0){ text+=`รายชื่อนักเรียนที่ลา:\n`; students.forEach(st=>{const r=recs.find(x=>x.student_id===st.id); if(r&&r.status==='ลา') text+=`  - เลขที่ ${st.id} ${st.name}\n`;}); text+=`\n`; }
-    text+=`---\nสร้างโดย CHECK SIXONE`;
-    return text;
+  const thaiDate=new Date(today).toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
+  let text=`📊 สรุปผลการเช็คชื่อ\nวันที่: ${thaiDate}\nห้อง: 6/1\n\n`;
+  text+=`สถิติการเข้าเรียน:\n`;
+  text+=`✅ มาเรียน: ${s.present} คน\n`;
+  text+=`⏰ เข้าสาย: ${s.late} คน\n`;
+  text+=`❌ ขาดเรียน: ${s.absent} คน\n`;
+  text+=`📝 ลา: ${s.leave} คน\n`;
+  text+=`👥 รวมทั้งหมด: ${s.total} คน\n\n`;
+
+  if (s.late>0){
+    text+=`รายชื่อผู้ที่เข้าสาย:\n`;
+    students.forEach(st=>{
+      const r=recs.find(x=>x.student_id===st.id);
+      if (r && r.status==='สาย') text+=`  - เลขที่ ${st.id} ${st.name}\n`;
+    });
+    text+=`\n`;
   }
+
+  if (s.absent>0){
+    text+=`รายชื่อนักเรียนที่ขาดเรียน:\n`;
+    students.forEach(st=>{
+      const r=recs.find(x=>x.student_id===st.id);
+      if (r && r.status==='ขาด') text+=`  - เลขที่ ${st.id} ${st.name}\n`;
+    });
+    text+=`\n`;
+  }
+
+  if (s.leave>0){
+    text+=`รายชื่อนักเรียนที่ลา:\n`;
+    students.forEach(st=>{
+      const r=recs.find(x=>x.student_id===st.id);
+      if (r && r.status==='ลา') text+=`  - เลขที่ ${st.id} ${st.name}\n`;
+    });
+    text+=`\n`;
+  }
+
+  text+=`---\nสร้างโดย CHECK SIXONE`;
+  return text;
+}
 
   function copySummary(){
     const t=generateSummaryText();
@@ -553,7 +585,7 @@ if (!window.elementSdk) {
           <p id="tagline" class="text-xl" style="color:${config.text_color}">${config.tagline}</p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div class="p-6 rounded-lg shadow-md surface" style="background:${config.surface_color}">
             <div class="flex items-center justify-between">
               <div><p class="text-sm" style="color:${config.text_color};opacity:.7">มาเรียน</p><p class="text-3xl font-bold" style="color:${config.secondary_color}">${s.present}</p></div>
@@ -596,6 +628,7 @@ if (!window.elementSdk) {
           <div class="flex flex-wrap gap-4 items-center justify-between">
             <div class="flex gap-4 text-sm">
               <span>มา: <strong style="color:${config.secondary_color}">${s.present}</strong></span>
+              <span>สาย: <strong class="text-orange-500">${s.late}</strong></span>
               <span>ขาด: <strong class="text-red-600">${s.absent}</strong></span>
               <span>ลา: <strong class="text-yellow-600">${s.leave}</strong></span>
             </div>
@@ -631,6 +664,10 @@ if (!window.elementSdk) {
                     <button class="btn-status ${status==='มา'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white" style="background:${status==='มา'?config.secondary_color:'#9ca3af'}" onclick="setAttendance('${st.id}','มา')" ${isLoading?'disabled':''}>มา</button>
                     <button class="btn-status ${status==='ขาด'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white" style="background:${status==='ขาด'?'#dc2626':'#9ca3af'}" onclick="setAttendance('${st.id}','ขาด')" ${isLoading?'disabled':''}>ขาด</button>
                     <button class="btn-status ${status==='ลา'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white" style="background:${status==='ลา'?'#ca8a04':'#9ca3af'}" onclick="setAttendance('${st.id}','ลา')" ${isLoading?'disabled':''}>ลา</button>
+                    <button 
+                      class="btn-status ${status==='สาย'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white"
+                      style="background:${status==='สาย'?'#f97316':'#9ca3af'}"   <!-- orange-500 -->
+                      onclick="setAttendance('${st.id}','สาย')" ${isLoading?'disabled':''}>สาย</button>
                   </div>
                 </div>
               </div>`;
@@ -693,7 +730,7 @@ if (!window.elementSdk) {
       <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <h2 class="text-2xl font-bold mb-6" style="color:${config.text_color}">รายงานและสถิติ</h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div class="p-6 rounded-lg shadow-md surface" style="background:${config.surface_color}">
             <h3 class="text-lg font-semibold mb-4" style="color:${config.text_color}">สรุปวันนี้</h3>
             <div class="space-y-2">
@@ -701,6 +738,7 @@ if (!window.elementSdk) {
               <div class="flex justify-between"><span>ขาดเรียน</span><span class="font-bold text-red-600">${s.absent}</span></div>
               <div class="flex justify-between"><span>ลา</span><span class="font-bold text-yellow-600">${s.leave}</span></div>
               <div class="flex justify-between pt-2 border-t" style="border-color:rgba(0,0,0,.1)"><span class="font-semibold">รวม</span><span class="font-bold">${s.total}</span></div>
+              <div class="flex justify-between"> <span>สาย</span><span class="font-bold text-orange-500">${s.late}</span></div>
             </div>
           </div>
 
