@@ -642,7 +642,7 @@ function getTodaySummary(){
     return `
     <div class="min-h-full" style="background:${config.background_color}">
       ${renderHeader(config)}
-      <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+      <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">re
         <div class="mb-6">
           <h2 class="text-2xl font-bold mb-2" style="color:${config.text_color}">เช็คชื่อวันนี้</h2>
           <p style="color:${config.text_color};opacity:.7">${today}</p>
@@ -650,12 +650,13 @@ function getTodaySummary(){
 
         <div class="p-4 rounded-lg shadow-md mb-6 surface" style="background:${config.surface_color}">
           <div class="flex flex-wrap gap-4 items-center justify-between">
-            <div class="flex gap-4 text-sm">
-              <span>มา: <strong style="color:${config.secondary_color}">${s.present}</strong></span>
-              <span>สาย: <strong class="text-orange-500">${s.late}</strong></span>
-              <span>ขาด: <strong class="text-red-600">${s.absent}</strong></span>
-              <span>ลา: <strong class="text-yellow-600">${s.leave}</strong></span>
+            <div class="flex gap-2 flex-wrap">
+              ${nderStatusBtn({statusNow:status, target:'มา',  label:'มา',  activeBg:config.secondary_color, inactiveBg:'#9ca3af', config, stId:st.id})}
+              ${renderStatusBtn({statusNow:status, target:'สาย', label:'สาย', activeBg:'#f97316',            inactiveBg:'#9ca3af', config, stId:st.id})}
+              ${renderStatusBtn({statusNow:status, target:'ขาด', label:'ขาด', activeBg:'#dc2626',            inactiveBg:'#9ca3af', config, stId:st.id})}
+              ${renderStatusBtn({statusNow:iggs, target:'ลา',  label:'ลา',  activeBg:'#ca8a04',            inactiveBg:'#9ca3af', config, stId:st.id})}
             </div>
+
             <button class="px-4 py-2 rounded-lg text-white font-medium text-sm" style="background:${config.secondary_color}" onclick="markAllPresent()" ${isLoading?'disabled':''}>${isLoading?'กำลังบันทึก...':'มาทั้งห้อง'}</button>
           </div>
         </div>
