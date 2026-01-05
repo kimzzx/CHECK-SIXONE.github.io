@@ -628,6 +628,14 @@ function getTodaySummary(){
       </main>
     </div>`;
   }
+    function renderStatusBtn({statusNow, target, label, activeBg, inactiveBg, config, stId}) {
+      const active = statusNow === target;
+      return `
+        <button class="btn-status ${active?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white"
+          style="background:${active ? activeBg : inactiveBg}"
+          onclick="setAttendance('${stId}','${target}')" ${isLoading?'disabled':''}>${label}</button>
+      `;
+    }
 
   function renderCheckPage(config){
     const today=getTodayString(); const s=getTodaySummary(); const list=getFilteredStudents();
@@ -677,22 +685,11 @@ function getTodaySummary(){
                     <p class="text-sm" style="color:${config.text_color};opacity:.6">${st.class || '-'}</p>
                   </div>
                   <div class="flex gap-2 flex-wrap">
-                  <button class="btn-status ${status==='มา'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white"
-                    style="background:${status==='มา'?config.secondary_color:'#9ca3af'}"
-                    onclick="setAttendance('${st.id}','มา')" ${isLoading?'disabled':''}>มา</button>
-                
-                  <button class="btn-status ${status==='สาย'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white"
-                    style="background:${status==='สาย'?'#f97316':'#9ca3af'}"
-                    onclick="setAttendance('${st.id}','สาย')" ${isLoading?'disabled':''}>สาย</button>
-                
-                  <button class="btn-status ${status==='ขาด'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white"
-                    style="background:${status==='ขาด'?'#dc2626':'#9ca3af'}"
-                    onclick="setAttendance('${st.id}','ขาด')" ${isLoading?'disabled':''}>ขาด</button>
-                
-                  <button class="btn-status ${status==='ลา'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white"
-                    style="background:${status==='ลา'?'#ca8a04':'#9ca3af'}"
-                    onclick="setAttendance('${st.id}','ลา')" ${isLoading?'disabled':''}>ลา</button>
-                </div>
+                    ${renderStatusBtn({statusNow:status, target:'มา',  label:'มา',  activeBg:config.secondary_color, inactiveBg:'#9ca3af', config, stId:st.id})}
+                    ${renderStatusBtn({statusNow:status, target:'สาย', label:'สาย', activeBg:'#f97316',            inactiveBg:'#9ca3af', config, stId:st.id})}
+                    ${renderStatusBtn({statusNow:status, target:'ขาด', label:'ขาด', activeBg:'#dc2626',            inactiveBg:'#9ca3af', config, stId:st.id})}
+                    ${renderStatusBtn({statusNow:iggs, target:'ลา',  label:'ลา',  activeBg:'#ca8a04',            inactiveBg:'#9ca3af', config, stId:st.id})}
+                  </div>
                 </div>
               </div>`;
           }).join('')}
