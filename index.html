@@ -305,23 +305,36 @@ if (!window.elementSdk) {
   }
 
   async function markAllPresent(){
-    const students = getStudentList();
-    if (attendanceRecords.length + students.length > 999) {
-      showToast('ถึงขีดจำกัดการบันทึก','error'); return;
-    }
-    isLoading=true; render();
-    const today=getTodayString();
-
-    for (const s of students){
-      const ex = attendanceRecords.find(r => r.student_id===s.id && r.date===today);
-      if (ex) {
-        // ถ้าเช็คแล้วไม่ทับ (สาย/ลา/ขาด/มา อยู่แล้ว)
-        continue;
-      } else {
-        await window.dataSdk.create({date:today, student_id:s.id, status:'มา', remark:'', timestamp:Date.now()});
-      }
-    isLoading=false; showToast('ติ๊กมาทั้งห้องสำเร็จ','success'); render();
+  const students = getStudentList();
+  if (attendanceRecords.length + students.length > 999) {
+    showToast('ถึงขีดจำกัดการบันทึก','error'); 
+    return;
   }
+
+  isLoading = true;
+  render();
+
+  const today = getTodayString();
+
+  for (const s of students){
+    const ex = attendanceRecords.find(r => r.student_id === s.id && r.date === today);
+    if (ex) {
+      // ถ้าเช็คแล้วไม่ทับ (สาย/ลา/ขาด/มา อยู่แล้ว)
+      continue;
+    }
+    await window.dataSdk.create({
+      date: today,
+      student_id: s.id,
+      status: 'มา',
+      remark: '',
+      timestamp: Date.now()
+    });
+  }
+
+  isLoading = false;
+  showToast('ติ๊กมาทั้งห้องสำเร็จ','success');
+  render();
+}
 
 function getTodaySummary(){
   const today = getTodayString();
@@ -663,7 +676,7 @@ function getTodaySummary(){
                     </div>
                     <p class="text-sm" style="color:${config.text_color};opacity:.6">${st.class || '-'}</p>
                   </div>
-                  <div class="flex gap-2">
+                  <div class="flex gap-2 flex-wrap">
                   <button class="btn-status ${status==='มา'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white"
                     style="background:${status==='มา'?config.secondary_color:'#9ca3af'}"
                     onclick="setAttendance('${st.id}','มา')" ${isLoading?'disabled':''}>มา</button>
@@ -679,6 +692,7 @@ function getTodaySummary(){
                   <button class="btn-status ${status==='ลา'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white"
                     style="background:${status==='ลา'?'#ca8a04':'#9ca3af'}"
                     onclick="setAttendance('${st.id}','ลา')" ${isLoading?'disabled':''}>ลา</button>
+                </div>
                 </div>
               </div>`;
           }).join('')}
