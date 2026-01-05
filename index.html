@@ -314,9 +314,12 @@ if (!window.elementSdk) {
 
     for (const s of students){
       const ex = attendanceRecords.find(r => r.student_id===s.id && r.date===today);
-      if (ex){ ex.status='มา'; ex.timestamp=Date.now(); await window.dataSdk.update(ex); }
-      else { await window.dataSdk.create({date:today,student_id:s.id,status:'มา',remark:'',timestamp:Date.now()}); }
-    }
+      if (ex) {
+        // ถ้าเช็คแล้วไม่ทับ (สาย/ลา/ขาด/มา อยู่แล้ว)
+        continue;
+      } else {
+        await window.dataSdk.create({date:today, student_id:s.id, status:'มา', remark:'', timestamp:Date.now()});
+      }
     isLoading=false; showToast('ติ๊กมาทั้งห้องสำเร็จ','success'); render();
   }
 
@@ -661,10 +664,23 @@ function getTodaySummary(){
                     <p class="text-sm" style="color:${config.text_color};opacity:.6">${st.class || '-'}</p>
                   </div>
                   <div class="flex gap-2">
-                    <button class="btn-status ${status==='มา'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white" style="background:${status==='มา'?config.secondary_color:'#9ca3af'}" onclick="setAttendance('${st.id}','มา')" ${isLoading?'disabled':''}>มา</button>
-                    <button class="btn-status ${status==='ขาด'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white" style="background:${status==='ขาด'?'#dc2626':'#9ca3af'}" onclick="setAttendance('${st.id}','ขาด')" ${isLoading?'disabled':''}>ขาด</button>
-                    <button class="btn-status ${status==='ลา'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white" style="background:${status==='ลา'?'#ca8a04':'#9ca3af'}" onclick="setAttendance('${st.id}','ลา')" ${isLoading?'disabled':''}>ลา</button>
-                  </div>
+                  <button class="btn-status ${status==='มา'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white"
+                    style="background:${status==='มา'?config.secondary_color:'#9ca3af'}"
+                    onclick="setAttendance('${st.id}','มา')" ${isLoading?'disabled':''}>มา</button>
+                
+                  <button class="btn-status ${status==='สาย'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white"
+                    style="background:${status==='สาย'?'#f97316':'#9ca3af'}"
+                    onclick="setAttendance('${st.id}','สาย')" ${isLoading?'disabled':''}>สาย</button>
+                
+                  <button class="btn-status ${status==='ขาด'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white"
+                    style="background:${status==='ขาด'?'#dc2626':'#9ca3af'}"
+                    onclick="setAttendance('${st.id}','ขาด')" ${isLoading?'disabled':''}>ขาด</button>
+                
+                  <button class="btn-status ${status==='ลา'?'active':''} px-4 py-2 rounded-lg font-medium text-sm text-white"
+                    style="background:${status==='ลา'?'#ca8a04':'#9ca3af'}"
+                    onclick="setAttendance('${st.id}','ลา')" ${isLoading?'disabled':''}>ลา</button>
+                </div>
+
                 </div>
               </div>`;
           }).join('')}
